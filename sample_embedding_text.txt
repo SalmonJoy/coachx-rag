@@ -1,0 +1,5 @@
+CoachX is an AI-powered fitness assistant that helps users create personalized workout plans.
+It can track progress across strength, endurance, flexibility, and recovery goals.
+Users can adjust routines based on available equipment, training history, and weekly schedule.
+A beginner might use CoachX to build a simple three-day strength program.
+An experienced athlete could use it to optimize training volume, nutrition timing, and performance metrics.
