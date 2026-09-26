@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PDF Ingestion</title>
+    <link rel="stylesheet" href="/ui/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel" aria-labelledby="page-title">
+        <div class="heading">
+          <p class="eyebrow">Contextual Vector API</p>
+          <h1 id="page-title">PDF ingestion</h1>
+          <p class="summary">
+            Upload a PDF to convert it to Markdown, create contextual chunks,
+            embed the chunks, and upload the vectors to Pinecone.
+          </p>
+          <nav class="page-nav" aria-label="UI pages">
+            <a href="/ui/chat.html">Chat</a>
+            <a href="/ui/chunks.html">View chunks</a>
+          </nav>
+        </div>
+
+        <form id="upload-form" class="upload-form">
+          <div class="field-grid">
+            <label class="field" for="index-name">
+              <span>Pinecone index name</span>
+              <input id="index-name" name="index_name" type="text" placeholder="rag-demo" required />
+            </label>
+
+            <label class="field" for="namespace">
+              <span>Pinecone namespace</span>
+              <input id="namespace" name="namespace" type="text" placeholder="demo-pdf" />
+              <small>Leave blank to use the backend default.</small>
+            </label>
+          </div>
+
+          <label class="drop-zone" for="pdf-file">
+            <span class="drop-title">Choose a PDF</span>
+            <span id="file-name" class="drop-detail">No file selected</span>
+            <input id="pdf-file" name="file" type="file" accept="application/pdf,.pdf" />
+          </label>
+
+          <button id="upload-button" type="submit">Upload PDF</button>
+        </form>
+
+        <div id="status" class="status" role="status" aria-live="polite"></div>
+
+        <section id="result-panel" class="result hidden" aria-labelledby="result-title">
+          <h2 id="result-title">Ingestion complete</h2>
+          <dl id="result-list"></dl>
+        </section>
+
+        <section id="error-panel" class="error hidden" aria-labelledby="error-title">
+          <h2 id="error-title">Upload failed</h2>
+          <p id="error-message"></p>
+        </section>
+      </section>
+    </main>
+
+    <script src="/ui/app.js"></script>
+  </body>
+</html>

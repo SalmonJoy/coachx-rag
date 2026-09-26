@@ -1,4 +1,4 @@
-import csv
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -9,11 +9,10 @@ from pinecone import Pinecone
 ROOT = Path(__file__).resolve().parent
 ENV_PATH = ROOT / ".env"
 
-DEFAULT_CSV_PATH = "nomic_embeddings.csv"
+DEFAULT_EMBEDDINGS_JSONL_PATH = "source/chunks/RAG demo embeddings.jsonl"
 DEFAULT_NAMESPACE = "coachx-sample"
 DEFAULT_BATCH_SIZE = 100
 DEFAULT_EXPECTED_DIMENSION = 768
-EMBEDDING_MODEL = "nomic-embed-text"
 
 
 def load_env(path: Path) -> None:
@@ -40,6 +39,13 @@ def required_env(name: str) -> str:
     return value
 
 
+def env_value(name: str, default: str) -> str:
+    value = os.environ.get(name, "").strip()
+    if not value or value.startswith("<"):
+        return default
+    return value
+
+
 def int_env(name: str, default: int) -> int:
     raw = os.environ.get(name, "").strip()
     if not raw or raw.startswith("<"):
@@ -56,15 +62,10 @@ def int_env(name: str, default: int) -> int:
     return value
 
 
-def csv_path_from_env() -> Path:
-    raw = os.environ.get("PINECONE_CSV_PATH", DEFAULT_CSV_PATH).strip()
-    if not raw or raw.startswith("<"):
-        raw = DEFAULT_CSV_PATH
-
-    path = Path(raw)
+def resolve_path(raw_path: str | Path) -> Path:
+    path = Path(raw_path)
     if not path.is_absolute():
         path = ROOT / path
-
     return path
 
 
@@ -76,63 +77,85 @@ def namespace_from_env() -> str:
     return raw.strip()
 
 
-def dimension_columns(fieldnames: list[str] | None) -> list[str]:
-    if not fieldnames:
-        raise RuntimeError("CSV is missing a header row")
-
-    columns = [name for name in fieldnames if name.startswith("dim_")]
-    if not columns:
-        raise RuntimeError("CSV does not contain any dim_* vector columns")
-
-    return sorted(columns, key=lambda name: int(name.removeprefix("dim_")))
+def embeddings_path_from_env() -> Path:
+    return resolve_path(
+        env_value("PINECONE_EMBEDDINGS_JSONL_PATH", DEFAULT_EMBEDDINGS_JSONL_PATH)
+    )
 
 
-def load_vectors(csv_path: Path, expected_dimension: int) -> list[dict[str, Any]]:
-    if not csv_path.exists():
-        raise FileNotFoundError(f"Missing CSV file: {csv_path}")
+def numeric_values(record: dict[str, Any], line_number: int) -> list[float]:
+    values = record.get("values")
+    if not isinstance(values, list):
+        raise RuntimeError(f"Line {line_number} has missing or non-list values")
+
+    numeric: list[float] = []
+    for index, value in enumerate(values):
+        if not isinstance(value, (int, float)):
+            raise RuntimeError(
+                f"Line {line_number} values[{index}] is not numeric: {value!r}"
+            )
+        numeric.append(float(value))
+
+    return numeric
+
+
+def metadata_from_record(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "text": record.get("text", ""),
+        "source_file": record.get("source_file", ""),
+        "heading": record.get("heading", ""),
+        "heading_level": record.get("heading_level", ""),
+        "start_line": record.get("start_line", ""),
+        "end_line": record.get("end_line", ""),
+        "embedding_model": record.get("embedding_model", ""),
+    }
+
+
+def load_vectors(jsonl_path: Path, expected_dimension: int) -> list[dict[str, Any]]:
+    if not jsonl_path.exists():
+        raise FileNotFoundError(f"Missing embeddings JSONL file: {jsonl_path}")
 
     vectors: list[dict[str, Any]] = []
-    with csv_path.open(newline="", encoding="utf-8") as file:
-        reader = csv.DictReader(file)
-        dims = dimension_columns(reader.fieldnames)
+    seen_ids: set[str] = set()
 
-        if len(dims) != expected_dimension:
-            raise RuntimeError(
-                f"Expected {expected_dimension} dimension columns, found {len(dims)}"
-            )
+    with jsonl_path.open("r", encoding="utf-8") as file:
+        for line_number, line in enumerate(file, start=1):
+            line = line.strip()
+            if not line:
+                continue
 
-        for row_number, row in enumerate(reader, start=1):
             try:
-                values = [float(row[column]) for column in dims]
-            except (TypeError, ValueError) as exc:
-                raise RuntimeError(
-                    f"Row {row_number} has a non-numeric vector value"
-                ) from exc
+                record = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(f"Invalid JSON on line {line_number}: {exc}") from exc
 
+            chunk_id = str(record.get("chunk_id", "")).strip()
+            text = str(record.get("text", "")).strip()
+            if not chunk_id:
+                raise RuntimeError(f"Line {line_number} is missing chunk_id")
+            if chunk_id in seen_ids:
+                raise RuntimeError(f"Duplicate chunk_id found: {chunk_id}")
+            if not text:
+                raise RuntimeError(f"Line {line_number} / {chunk_id} has empty text")
+
+            values = numeric_values(record, line_number)
             if len(values) != expected_dimension:
                 raise RuntimeError(
-                    f"Row {row_number} has {len(values)} values, "
+                    f"Line {line_number} / {chunk_id} has {len(values)} dimensions, "
                     f"expected {expected_dimension}"
                 )
 
-            row_id = row.get("id", str(row_number)).strip() or str(row_number)
-            text = row.get("text", "").strip()
-
+            seen_ids.add(chunk_id)
             vectors.append(
                 {
-                    "id": f"sample-text-{row_id}",
+                    "id": chunk_id,
                     "values": values,
-                    "metadata": {
-                        "text": text,
-                        "source": csv_path.name,
-                        "row_id": int(row_id) if row_id.isdigit() else row_id,
-                        "embedding_model": EMBEDDING_MODEL,
-                    },
+                    "metadata": metadata_from_record(record),
                 }
             )
 
     if not vectors:
-        raise RuntimeError(f"No vectors found in {csv_path}")
+        raise RuntimeError(f"No vectors found in {jsonl_path}")
 
     return vectors
 
@@ -154,14 +177,16 @@ def main() -> None:
     api_key = required_env("PINECONE_API_KEY")
     index_name = required_env("PINECONE_INDEX_NAME")
     namespace = namespace_from_env()
-    csv_path = csv_path_from_env()
+    jsonl_path = embeddings_path_from_env()
     batch_size = int_env("PINECONE_BATCH_SIZE", DEFAULT_BATCH_SIZE)
     expected_dimension = int_env(
         "PINECONE_EXPECTED_DIMENSION", DEFAULT_EXPECTED_DIMENSION
     )
 
-    vectors = load_vectors(csv_path, expected_dimension)
+    print(f"[1/3] Loading vectors from {jsonl_path}...")
+    vectors = load_vectors(jsonl_path, expected_dimension)
 
+    print(f"[2/3] Upserting {len(vectors)} vectors to Pinecone index {index_name!r}...")
     client = Pinecone(api_key=api_key)
     index = get_index_client(client, index_name)
 
@@ -170,10 +195,7 @@ def main() -> None:
         response = index.upsert(vectors=batch, namespace=namespace)
         uploaded += getattr(response, "upserted_count", len(batch))
 
-    print(
-        f"Uploaded {uploaded} vectors to Pinecone index "
-        f"{index_name!r} namespace {namespace!r}"
-    )
+    print(f"[3/3] Uploaded {uploaded} vectors to namespace {namespace!r}.")
 
 
 if __name__ == "__main__":

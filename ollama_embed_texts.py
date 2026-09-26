@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -7,31 +8,26 @@ import requests
 
 ROOT = Path(__file__).resolve().parent
 ENV_PATH = ROOT / ".env"
-TEXT_PATH = ROOT / "sample_embedding_text.txt"
 
-DEFAULT_MODELS = [
-    "embeddinggemma",
-    "qwen3-embedding",
-    "all-minilm",
-    "nomic-embed-text",
-    "mxbai-embed-large",
+DEFAULT_OLLAMA_HOST = "http://localhost:11434"
+DEFAULT_OLLAMA_EMBED_MODEL = "nomic-embed-text"
+DEFAULT_CHUNKS_JSONL_PATH = "source/chunks/RAG demo.jsonl"
+DEFAULT_EMBEDDINGS_JSONL_PATH = "source/chunks/RAG demo embeddings.jsonl"
+
+METADATA_COLUMNS = [
+    "chunk_id",
+    "source_file",
+    "heading",
+    "heading_level",
+    "start_line",
+    "end_line",
+    "text",
 ]
-
-
-def bearer_token(value: str | None) -> str | None:
-    if not value:
-        return None
-
-    stripped = value.strip()
-    if stripped.lower().startswith("bearer "):
-        return stripped.split(None, 1)[1].strip()
-
-    return stripped
 
 
 def load_env(path: Path) -> None:
     if not path.exists():
-        raise FileNotFoundError(f"Missing .env file: {path}")
+        return
 
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
@@ -46,21 +42,49 @@ def load_env(path: Path) -> None:
             os.environ[key] = value
 
 
-def load_text_lines(path: Path) -> list[str]:
+def env_value(name: str, default: str) -> str:
+    value = os.environ.get(name, "").strip()
+    if not value or value.startswith("<"):
+        return default
+    return value
+
+
+def resolve_path(raw_path: str | Path) -> Path:
+    path = Path(raw_path)
+    if not path.is_absolute():
+        path = ROOT / path
+    return path
+
+
+def load_chunks(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
-        raise FileNotFoundError(f"Missing text file: {path}")
+        raise FileNotFoundError(f"Chunks JSONL file not found: {path}")
 
-    return [
-        line.strip()
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
+    chunks: list[dict[str, Any]] = []
+    with path.open("r", encoding="utf-8") as file:
+        for line_number, line in enumerate(file, start=1):
+            line = line.strip()
+            if not line:
+                continue
 
+            try:
+                chunk = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(f"Invalid JSON on line {line_number}: {exc}") from exc
 
-def configured_models() -> list[str]:
-    raw = os.environ.get("OLLAMA_EMBED_MODELS", "")
-    models = [model.strip() for model in raw.split(",") if model.strip()]
-    return models or DEFAULT_MODELS
+            chunk_id = str(chunk.get("chunk_id", "")).strip()
+            text = str(chunk.get("text", "")).strip()
+            if not chunk_id:
+                raise RuntimeError(f"Line {line_number} is missing chunk_id")
+            if not text:
+                raise RuntimeError(f"Line {line_number} / {chunk_id} has empty text")
+
+            chunks.append(chunk)
+
+    if not chunks:
+        raise RuntimeError(f"No chunks found in {path}")
+
+    return chunks
 
 
 def short_error(response: requests.Response) -> str:
@@ -77,19 +101,13 @@ def short_error(response: requests.Response) -> str:
     return str(payload)[:300]
 
 
-def try_embed(
-    label: str,
-    base_url: str,
-    path: str,
+def embed_chunks(
+    chunks: list[dict[str, Any]],
+    ollama_host: str,
     model: str,
-    texts: list[str],
-    api_key: str | None = None,
-) -> dict[str, Any] | None:
-    headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-
-    url = f"{base_url.rstrip('/')}/{path.lstrip('/')}"
+) -> list[list[float]]:
+    url = f"{ollama_host.rstrip('/')}/api/embed"
+    texts = [str(chunk["text"]).strip() for chunk in chunks]
     body = {
         "model": model,
         "input": texts,
@@ -97,64 +115,84 @@ def try_embed(
     }
 
     try:
-        response = requests.post(url, json=body, headers=headers, timeout=60)
+        response = requests.post(url, json=body, timeout=120)
     except requests.RequestException as exc:
-        print(f"{label} / {model}: connection failed ({exc})")
-        return None
+        raise RuntimeError(
+            f"Could not connect to Ollama at {url}. Is Ollama running?"
+        ) from exc
 
     if response.status_code != 200:
-        print(f"{label} / {model}: HTTP {response.status_code} ({short_error(response)})")
-        return None
+        raise RuntimeError(
+            f"Ollama returned HTTP {response.status_code}: {short_error(response)}"
+        )
 
     payload = response.json()
     embeddings = payload.get("embeddings")
-    if embeddings is None and isinstance(payload.get("data"), list):
-        embeddings = [item.get("embedding") for item in payload["data"]]
-
     if not embeddings:
-        print(f"{label} / {model}: no embeddings found in response")
-        return None
+        raise RuntimeError("Ollama response did not contain embeddings")
 
+    if len(embeddings) != len(chunks):
+        raise RuntimeError(
+            f"Ollama returned {len(embeddings)} embeddings for {len(chunks)} chunks"
+        )
+
+    dimensions = {len(embedding) for embedding in embeddings}
+    if len(dimensions) != 1:
+        raise RuntimeError(f"Embeddings have inconsistent dimensions: {dimensions}")
+
+    return embeddings
+
+
+def write_embeddings_jsonl(
+    chunks: list[dict[str, Any]],
+    embeddings: list[list[float]],
+    output_path: Path,
+    model: str,
+) -> None:
+    if not embeddings:
+        raise RuntimeError("No embeddings to write")
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     dimensions = len(embeddings[0])
-    print(f"{label} / {model}: connected, {len(embeddings)} embeddings, {dimensions} dimensions")
-    return payload
+
+    with output_path.open("w", encoding="utf-8", newline="\n") as file:
+        for chunk, embedding in zip(chunks, embeddings):
+            record = {column: chunk.get(column, "") for column in METADATA_COLUMNS}
+            record["embedding_model"] = model
+            record["embedding_dimensions"] = dimensions
+            record["values"] = embedding
+            file.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
 def main() -> None:
     load_env(ENV_PATH)
 
-    texts = load_text_lines(TEXT_PATH)
-    api_key = bearer_token(os.environ.get("OLLAMA_API_KEY"))
-    local_base_url = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
-    models = configured_models()
+    input_path = resolve_path(
+        env_value("OLLAMA_CHUNKS_JSONL_PATH", DEFAULT_CHUNKS_JSONL_PATH)
+    )
+    output_path = resolve_path(
+        env_value("OLLAMA_CHUNKS_EMBEDDINGS_JSONL_PATH", DEFAULT_EMBEDDINGS_JSONL_PATH)
+    )
+    ollama_host = env_value("OLLAMA_HOST", DEFAULT_OLLAMA_HOST)
+    model = env_value("OLLAMA_EMBED_MODEL", DEFAULT_OLLAMA_EMBED_MODEL)
 
-    print(f"Loaded {len(texts)} text lines from {TEXT_PATH.name}")
-    print(f"Trying models: {', '.join(models)}")
-    if api_key:
-        print(f"OLLAMA_API_KEY loaded ({len(api_key)} characters)")
+    print(f"[1/4] Loading chunks from {input_path}...")
+    chunks = load_chunks(input_path)
 
-    checks: list[tuple[str, str, str, str | None]] = [
-        ("local native", local_base_url, "/api/embed", None),
-        ("local OpenAI-compatible", local_base_url, "/v1/embeddings", None),
-    ]
+    print(f"[2/4] Embedding {len(chunks)} chunks with {model}...")
+    embeddings = embed_chunks(chunks, ollama_host, model)
 
-    if api_key:
-        checks.append(("cloud native", "https://ollama.com", "/api/embed", api_key))
-        checks.append(("cloud OpenAI-compatible", "https://ollama.com", "/v1/embeddings", api_key))
-    else:
-        print("OLLAMA_API_KEY not found; skipping cloud check")
+    print(f"[3/4] Writing JSONL: {output_path}...")
+    write_embeddings_jsonl(chunks, embeddings, output_path, model)
 
-    connected = False
-    for label, base_url, path, key in checks:
-        print(f"\nChecking {label} endpoint: {base_url.rstrip('/')}{path}")
-        for model in models:
-            payload = try_embed(label, base_url, path, model, texts, key)
-            if payload is not None:
-                connected = True
-
-    if not connected:
-        raise SystemExit("\nNo working Ollama embedding model was found.")
+    print(
+        f"[4/4] Done. Wrote {len(embeddings)} embeddings "
+        f"with {len(embeddings[0])} dimensions."
+    )
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (FileNotFoundError, RuntimeError) as exc:
+        raise SystemExit(f"Error: {exc}") from exc

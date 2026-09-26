@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Grounded Chat</title>
+    <link rel="stylesheet" href="/ui/styles.css" />
+  </head>
+  <body>
+    <main class="shell shell-wide">
+      <section class="panel" aria-labelledby="page-title">
+        <div class="heading">
+          <p class="eyebrow">Contextual Vector API</p>
+          <h1 id="page-title">Grounded chat</h1>
+          <p class="summary">
+            Ask a question, retrieve the closest Pinecone chunks, and generate
+            an answer grounded in those chunks.
+          </p>
+          <nav class="page-nav" aria-label="UI pages">
+            <a href="/ui/">Upload PDF</a>
+            <a href="/ui/chunks.html">View chunks</a>
+          </nav>
+        </div>
+
+        <form id="chat-form" class="upload-form">
+          <label class="field" for="query">
+            <span>Question</span>
+            <textarea
+              id="query"
+              name="query"
+              rows="4"
+              placeholder="What can I learn about Peabody Hall?"
+              required
+            ></textarea>
+          </label>
+
+          <div class="field-grid chat-field-grid">
+            <label class="field" for="chat-index-name">
+              <span>Pinecone index name</span>
+              <input id="chat-index-name" name="index_name" type="text" placeholder="rag-demo" required />
+            </label>
+
+            <label class="field" for="chat-namespace">
+              <span>Pinecone namespace</span>
+              <input id="chat-namespace" name="namespace" type="text" placeholder="upoaded-from-ui" />
+              <small>Leave blank to use the backend default.</small>
+            </label>
+
+            <label class="field" for="top-k">
+              <span>Top K</span>
+              <input id="top-k" name="top_k" type="number" min="1" step="1" value="3" />
+            </label>
+          </div>
+
+          <button id="chat-button" type="submit">Ask question</button>
+        </form>
+
+        <div id="chat-status" class="status" role="status" aria-live="polite"></div>
+
+        <section id="answer-panel" class="result hidden" aria-labelledby="answer-title">
+          <h2 id="answer-title">Grounded answer</h2>
+          <p id="answer-text" class="answer-text"></p>
+
+          <dl id="chat-meta" class="chat-meta"></dl>
+
+          <h2>Source chunks</h2>
+          <div id="chunks-list" class="chunks-list"></div>
+        </section>
+
+        <section id="chat-error-panel" class="error hidden" aria-labelledby="chat-error-title">
+          <h2 id="chat-error-title">Chat failed</h2>
+          <p id="chat-error-message"></p>
+        </section>
+      </section>
+    </main>
+
+    <script src="/ui/chat.js"></script>
+  </body>
+</html>

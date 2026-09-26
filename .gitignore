@@ -20,6 +20,12 @@ htmlcov/
 
 # Generated embedding/vector outputs
 nomic_embeddings.csv
+source/md/
+source/chunks/
+
+# Local source documents and FastAPI ingestion runs
+source/pdf/
+backend/data/runs/
 
 # Logs and temporary files
 *.log

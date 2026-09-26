@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pinecone Chunks</title>
+    <link rel="stylesheet" href="/ui/styles.css" />
+  </head>
+  <body>
+    <main class="shell shell-wide">
+      <section class="panel" aria-labelledby="page-title">
+        <div class="heading">
+          <p class="eyebrow">Contextual Vector API</p>
+          <h1 id="page-title">Pinecone chunks</h1>
+          <p class="summary">
+            Browse stored chunk metadata and text by Pinecone index and namespace.
+          </p>
+          <nav class="page-nav" aria-label="UI pages">
+            <a href="/ui/">Upload PDF</a>
+            <a href="/ui/chat.html">Chat</a>
+          </nav>
+        </div>
+
+        <form id="chunks-form" class="upload-form">
+          <div class="field-grid viewer-field-grid">
+            <label class="field" for="viewer-index-name">
+              <span>Pinecone index</span>
+              <select id="viewer-index-name" name="index_name" required>
+                <option value="">Loading indexes...</option>
+              </select>
+            </label>
+
+            <label class="field" for="viewer-namespace">
+              <span>Pinecone namespace</span>
+              <select id="viewer-namespace" name="namespace" required>
+                <option value="">Select an index first</option>
+              </select>
+            </label>
+
+            <label class="field" for="viewer-limit">
+              <span>Limit</span>
+              <input id="viewer-limit" name="limit" type="number" min="1" max="1000" step="1" value="100" />
+            </label>
+          </div>
+
+          <button id="chunks-button" type="submit">Load chunks</button>
+        </form>
+
+        <div id="chunks-status" class="status" role="status" aria-live="polite"></div>
+
+        <section id="chunks-result-panel" class="result hidden" aria-labelledby="chunks-result-title">
+          <h2 id="chunks-result-title">Stored chunks</h2>
+          <dl id="chunks-meta" class="chat-meta"></dl>
+          <div id="viewer-chunks-list" class="chunks-list"></div>
+        </section>
+
+        <section id="chunks-error-panel" class="error hidden" aria-labelledby="chunks-error-title">
+          <h2 id="chunks-error-title">Could not load chunks</h2>
+          <p id="chunks-error-message"></p>
+        </section>
+      </section>
+    </main>
+
+    <script src="/ui/chunks.js"></script>
+  </body>
+</html>
