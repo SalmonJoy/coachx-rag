@@ -1,0 +1,7 @@
+langchain
+langchain-core
+langgraph
+langchain-ollama
+langchain-pinecone
+python-dotenv
+pinecone
