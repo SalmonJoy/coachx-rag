@@ -1,0 +1,171 @@
+{
+  "name": "Auto Email Reply",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {}
+      },
+      "id": "61a97402-65b5-4666-9a14-e2fd91aa4eb7",
+      "name": "Gmail Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -192,
+        -16
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "2Hjx0D5HnQ4lujGE",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Draft an email subject and body as a reply to this mail -\nMail from: {{ $json.From }}\nSubject: {{ $json.Subject }}\nBody: {{ $json.snippet }}\n\nAdd this signarure in the end:\nSalmon Joy\nAI Engineer\n\nDesign the mail body using html to lookk good and proffesional",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are an email assistant that drafts polite, concise reply emails. Respond ONLY with a single valid JSON object with exactly two string keys: \"email_subject\" and \"email_body\". Do not include markdown, code fences, or any text outside the JSON object."
+        }
+      },
+      "id": "2e264d95-a2c9-42ba-947d-2401f8db3b86",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        32,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-oss:20b",
+        "options": {}
+      },
+      "id": "12f1d7e9-78d4-4d2c-a934-10bfcc9ee361",
+      "name": "Ollama Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        0,
+        336
+      ],
+      "credentials": {
+        "ollamaApi": {
+          "id": "zHpctCIooC94UHQR",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n\t\"email_subject\": \"Email Subject\",\n\t\"email_body\": \"Email Body\"\n}",
+        "autoFix": true
+      },
+      "id": "95aaad6d-af35-4443-be79-fafadc35a944",
+      "name": "Structured Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "reply",
+        "messageId": "={{ $('Gmail Trigger').item.json.threadId }}",
+        "message": "={{ $json.output.email_body }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        400,
+        -16
+      ],
+      "id": "2dc27206-05ca-40d7-b37a-889425e2f9f4",
+      "name": "Reply to a message",
+      "webhookId": "82bd3300-0c29-4e0a-b3ac-69bde49235bc",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "2Hjx0D5HnQ4lujGE",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Structured Output Parser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Reply to a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "c8fc544a-e00f-4ee0-83be-3d5b5b2b2e1d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "03dcd68d7f81ba968d85ebe1338f4ff6ce289b739e0a6e2094b74464954f749e"
+  },
+  "nodeGroups": [],
+  "id": "rPRCmIcJ53AzHHsQ",
+  "tags": []
+}

@@ -1,0 +1,273 @@
+{
+  "name": "CoachX LinkedIn Auto Post",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 10,
+              "triggerAtMinute": 23
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -192,
+        -16
+      ],
+      "id": "0f47c198-4541-4180-8be0-614352dc9af9",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1uZWykaQ_LbW3ci9jzeR1YXsrrsDa1SV38ahUoa6M2hY",
+          "mode": "list",
+          "cachedResultName": "Coachx LinkedIn Topics",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1uZWykaQ_LbW3ci9jzeR1YXsrrsDa1SV38ahUoa6M2hY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1uZWykaQ_LbW3ci9jzeR1YXsrrsDa1SV38ahUoa6M2hY/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Status",
+              "lookupValue": "Pending"
+            }
+          ]
+        },
+        "options": {
+          "returnFirstMatch": true
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        32,
+        -16
+      ],
+      "id": "098dae53-e2bb-45aa-928e-d15c576b1d20",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "lFdA68sMFHKulXro",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Draft a LinkedIn post on the following topic:\n {{ $json.Topics }}\n\nMake sure the post is engaging and as if directly talking to the reader\nAdd some interesting example or analogies\nKeep it a little funny by including some joke\nKeep a storytelling format\nEnd with something which would trigger comments and interactions\n\nKeep it less than 2000 characters including spaces\nDon't use em dash (—) in the article\nDon't add any formatting other than new line",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        256,
+        -16
+      ],
+      "id": "2cf534be-7563-4e3a-85a3-4a51656acdd3",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": "gpt-oss:120b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        272,
+        160
+      ],
+      "id": "1c0ec741-9b8d-47ee-9a15-bee867838035",
+      "name": "Ollama Chat Model",
+      "credentials": {
+        "ollamaApi": {
+          "id": "zHpctCIooC94UHQR",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "person": "kSrHNtGTpS",
+        "text": "={{ $json.output }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.linkedIn",
+      "typeVersion": 1,
+      "position": [
+        576,
+        -16
+      ],
+      "id": "12d9a4d4-8d4e-4b41-9e60-ab76ec9c8c67",
+      "name": "Create a post",
+      "credentials": {
+        "linkedInOAuth2Api": {
+          "id": "CVX7KDATwfHWjTe0",
+          "name": "LinkedIn account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1uZWykaQ_LbW3ci9jzeR1YXsrrsDa1SV38ahUoa6M2hY",
+          "mode": "list",
+          "cachedResultName": "Coachx LinkedIn Topics",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1uZWykaQ_LbW3ci9jzeR1YXsrrsDa1SV38ahUoa6M2hY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1uZWykaQ_LbW3ci9jzeR1YXsrrsDa1SV38ahUoa6M2hY/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $('Get row(s) in sheet').item.json.row_number }}",
+            "Status": "Completed"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "Topics",
+              "displayName": "Topics",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        752,
+        -16
+      ],
+      "id": "3ee4aa08-acd5-4a83-a68c-f8943e32dc58",
+      "name": "Update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "lFdA68sMFHKulXro",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Create a post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a post": {
+      "main": [
+        [
+          {
+            "node": "Update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "c3d9b6e3-4eec-4f77-9d90-4c408df79ce0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "03dcd68d7f81ba968d85ebe1338f4ff6ce289b739e0a6e2094b74464954f749e"
+  },
+  "nodeGroups": [],
+  "id": "6b3GdrtweX45ayd7",
+  "tags": []
+}
